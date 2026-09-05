@@ -701,7 +701,7 @@ func (p *Pool) recordBreakerFailureLocked(e *entry) {
 }
 
 // CooldownUntilTomorrow4AM 冷却到次日 04:00（本地时区）。
-// 用于 ErrHardCredit 场景：积分耗尽账号等签到任务（09:00/21:00）恢复。
+// 用于 ErrHardCredit 场景：积分耗尽账号等签到任务（默认每日 01:00）恢复。
 func (p *Pool) CooldownUntilTomorrow4AM(uid string, reason string) {
 	now := time.Now()
 	p.Cooldown(uid, CoolHard, nextDay4AM(now).Sub(now), reason)

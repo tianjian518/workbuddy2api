@@ -26,7 +26,7 @@ type Config struct {
 	} `json:"cooldown"`
 
 	Schedule struct {
-		CheckinHours   []int `json:"checkin_hours"`   // [9,21]
+		CheckinHours   []int `json:"checkin_hours"`   // 默认 [1]（凌晨 1 点全量签到）
 		KeepaliveHours []int `json:"keepalive_hours"` // [22]
 	} `json:"schedule"`
 
@@ -77,7 +77,7 @@ func Default() *Config {
 		Region:    "cn",
 	}
 	c.Cooldown.SoftRate = "60s"
-	c.Schedule.CheckinHours = []int{9, 21}
+	c.Schedule.CheckinHours = []int{1} // 凌晨 1 点全量签到
 	c.Schedule.KeepaliveHours = []int{22}
 	c.Upstream.TimeoutSeconds = 120
 	c.Features.SanitizeBlacklistFingerprints = true

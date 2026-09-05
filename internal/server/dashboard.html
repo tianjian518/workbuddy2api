@@ -62,6 +62,27 @@
   <div class="cards" id="cards"></div>
 
   <section>
+    <h2><span class="dot" style="background:var(--accent)"></span>登录 WorkBuddy 账号（支持多账号）</h2>
+    <div class="row">
+      <button id="loginBtn" class="primary">＋ 登录 / 添加账号</button>
+      <span class="muted">每次登录一个账号，可反复点击添加多个；同 uid 重复登录会覆盖更新凭证。</span>
+    </div>
+    <div id="loginBox" style="margin-top:12px;display:none">
+      <div>1. 在新标签页打开 <a id="loginUrl" target="_blank" rel="noopener" style="color:var(--blue);word-break:break-all"></a></div>
+      <div style="margin-top:6px">2. 在该页面完成登录，这里会自动检测并保存：<span id="loginStatus" class="muted">等待登录…</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="dot" style="background:var(--yellow)"></span>每日签到</h2>
+    <div class="row">
+      <button id="checkinBtn" class="primary">立即全量签到</button>
+      <span id="scheduleInfo" class="muted">加载中…</span>
+    </div>
+    <div id="checkinResult" style="margin-top:12px"></div>
+  </section>
+
+  <section>
     <h2><span class="dot" style="background:var(--blue)"></span>账号状态（/status）</h2>
     <div id="accounts"></div>
   </section>
@@ -91,6 +112,12 @@ function setKey(k){
 function authHeaders(){
   const k = getKey();
   return k ? {'Authorization':'Bearer '+k} : {};
+}
+function errText(e){
+  if(e && e.error && e.error.message) return e.error.message;
+  if(e && e.text) return e.text;
+  if(e && e.message) return e.message;
+  return String(e);
 }
 async function getJSON(url){
   const r = await fetch(url, {headers:authHeaders()});
@@ -122,7 +149,7 @@ function statusBadge(st){
 function renderAccounts(s){
   const accs = Array.isArray(s.accounts) ? s.accounts : [];
   if(accs.length===0){
-    $('#accounts').innerHTML = `<div class="empty">暂无账号。请在容器内执行 <code>./login.sh</code> 登录 WorkBuddy 账号，或检查 api_key 是否填写正确。</div>`;
+    $('#accounts').innerHTML = `<div class="empty">暂无账号。点击上方「＋ 登录 / 添加账号」按钮完成授权（支持连续登录多个账号）。</div>`;
     return;
   }
   let rows = '';
@@ -164,6 +191,7 @@ async function load(){
     renderCards(s, hz);
     renderAccounts(s);
     renderModels(m);
+    loadSchedule();
     $('#raw').textContent = JSON.stringify(s, null, 2);
   } catch(e){
     $('#accounts').innerHTML = `<div class="err">请求失败：HTTP ${e.status||''} ${e.text||e.message||e}</div>`;
@@ -178,8 +206,87 @@ function startAuto(){
 $('#saveKey').onclick = ()=>{ setKey($('#apikey').value.trim()); load(); };
 $('#refresh').onclick = load;
 $('#auto').onchange = startAuto;
+
+// ---- 面板内登录（多账号）----
+let pollTimer = null, pollState = '';
+async function startLogin(){
+  $('#loginBox').style.display = 'block';
+  $('#loginStatus').textContent = '正在发起授权…';
+  try {
+    const r = await fetch('/api/login/start', {headers:authHeaders()});
+    const d = await r.json();
+    if(!r.ok) throw d;
+    pollState = d.state;
+    $('#loginUrl').href = d.auth_url;
+    $('#loginUrl').textContent = d.auth_url;
+    $('#loginStatus').textContent = '等待你在浏览器完成登录…（每 3 秒自动检测）';
+    $('#loginBtn').disabled = true;
+    clearInterval(pollTimer);
+    pollTimer = setInterval(pollLogin, 3000);
+  } catch(e){
+    $('#loginStatus').innerHTML = `<span class="err">发起失败：${errText(e)}</span>`;
+  }
+}
+async function pollLogin(){
+  if(!pollState) return;
+  try {
+    const d = await getJSON('/api/login/poll?state='+encodeURIComponent(pollState));
+    if(d.status === 'pending') return; // 用户还没完成登录，继续轮询
+    clearInterval(pollTimer); pollTimer = null; pollState = '';
+    $('#loginBtn').disabled = false;
+    if(d.status === 'done'){
+      $('#loginStatus').innerHTML = `✅ 登录成功：${(d.nickname&&d.nickname!=='')?d.nickname:'账号'}（uid=${d.uid}），凭证已保存并热加载，当前账号数 ${d.total_accounts}`;
+      load();
+    } else {
+      $('#loginStatus').innerHTML = `<span class="err">❌ ${d.message||d.status}</span>`;
+    }
+  } catch(e){
+    clearInterval(pollTimer); pollTimer = null; pollState = '';
+    $('#loginBtn').disabled = false;
+    $('#loginStatus').innerHTML = `<span class="err">轮询失败：${errText(e)}</span>`;
+  }
+}
+$('#loginBtn').onclick = startLogin;
+
+// ---- 每日签到 ----
+async function loadSchedule(){
+  try {
+    const d = await getJSON('/api/schedule');
+    const hrs = (d.checkin_hours||[]).map(h=>String(h).padStart(2,'0')+':00').join(' / ');
+    $('#scheduleInfo').textContent = `自动签到：每天 ${hrs} ｜ 下次：${d.next_checkin_at}（${d.timezone}）`;
+  } catch(e){
+    $('#scheduleInfo').innerHTML = `<span class="err">调度信息加载失败：${errText(e)}</span>`;
+  }
+}
+async function runCheckin(){
+  const btn = $('#checkinBtn');
+  btn.disabled = true; btn.textContent = '签到中…';
+  $('#checkinResult').innerHTML = `<div class="muted">正在对所有账号执行签到（含余额刷新与解冻），请稍候…</div>`;
+  try {
+    const r = await fetch('/api/checkin', {method:'POST', headers:authHeaders()});
+    const d = await r.json();
+    if(!r.ok) throw d;
+    const s = d.summary||{};
+    const rows = (d.results||[]).map(x=>`<tr>
+      <td class="k">uid</td><td>${(x.uid||'').replace(/</g,'&lt;')}</td>
+      <td class="k">昵称</td><td>${(x.nickname||'-').replace(/</g,'&lt;')}</td>
+      <td class="k">签到</td><td>${x.checkin||''}</td>
+      <td class="k">余额</td><td>${x.remain>=0?x.remain:'-'}</td>
+      <td class="k">详情</td><td class="muted">${(x.detail||'').replace(/</g,'&lt;')}</td>
+    </tr>`).join('');
+    $('#checkinResult').innerHTML = `<div class="muted">完成：成功 ${s.ok||0} ｜ 已签 ${s.already||0} ｜ 失败 ${s.fail||0} ｜ 跳过 ${s.skip||0}</div>
+      <table style="margin-top:8px"><tbody>${rows}</tbody></table>`;
+    load();
+  } catch(e){
+    $('#checkinResult').innerHTML = `<div class="err">签到失败：${errText(e)}</div>`;
+  }
+  btn.disabled = false; btn.textContent = '立即全量签到';
+}
+$('#checkinBtn').onclick = runCheckin;
+
 setKey(getKey());
 load();
+loadSchedule();
 startAuto();
 </script>
 </body>

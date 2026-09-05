@@ -14,6 +14,7 @@ import (
 
 	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/pool"
+	"workbuddy2api/internal/scheduler"
 	"workbuddy2api/internal/session"
 	"workbuddy2api/internal/upstream"
 )
@@ -35,12 +36,17 @@ type Config struct {
 	RedisMode    string
 	SoftCooldown time.Duration // 429 冷却，默认 60s
 	RefreshSkew  time.Duration // token 提前刷新窗口，默认 10m
+	// AuthDir 凭证落盘目录（面板登录写 workbuddy-<uid>.json 到这里）；空 = 禁用面板登录。
+	AuthDir string
+	// Scheduler 调度器（面板手动签到 / 展示下次签到时间用）；nil = 相关接口返回 503。
+	Scheduler *scheduler.Scheduler
 }
 
 // Handler 主路由。
 type Handler struct {
-	cfg Config
-	mux *http.ServeMux
+	cfg       Config
+	mux       *http.ServeMux
+	loginFlow *loginFlow
 }
 
 // NewHandler 构建 handler。
@@ -55,11 +61,19 @@ func NewHandler(cfg Config) *Handler {
 		cfg.RefreshSkew = 10 * time.Minute
 	}
 	h := &Handler{cfg: cfg, mux: http.NewServeMux()}
+	if cfg.AuthDir != "" {
+		h.loginFlow = newLoginFlow(cfg.AuthDir)
+	}
 	h.mux.HandleFunc("POST /v1/chat/completions", h.withAuth(h.chatCompletions))
 	h.mux.HandleFunc("GET /v1/models", h.withAuth(h.models))
 	h.mux.HandleFunc("GET /status", h.withAuth(h.status))
 	h.mux.HandleFunc("GET /healthz", h.healthz)
 	h.mux.HandleFunc("GET /", h.dashboard)
+	// 面板：登录 / 签到 / 调度信息（带 api_key 鉴权，与 /status 同口径）
+	h.mux.HandleFunc("GET /api/login/start", h.withAuth(h.loginStart))
+	h.mux.HandleFunc("GET /api/login/poll", h.withAuth(h.loginPoll))
+	h.mux.HandleFunc("POST /api/checkin", h.withAuth(h.checkinNow))
+	h.mux.HandleFunc("GET /api/schedule", h.withAuth(h.scheduleInfo))
 	return h
 }
 
@@ -76,6 +90,90 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// loginStart 发起面板登录：返回授权 URL 与 state，用户在浏览器完成登录。
+func (h *Handler) loginStart(w http.ResponseWriter, r *http.Request) {
+	if h.loginFlow == nil {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "login_disabled", "面板登录未启用：config 缺少 auth_dir")
+		return
+	}
+	authURL, state, err := h.loginFlow.Start()
+	if err != nil {
+		writeOpenAIError(w, http.StatusBadGateway, "login_start", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"auth_url": authURL, "state": state})
+}
+
+// loginPoll 轮询一次登录状态；done 时落盘凭证并热加载进池（无需重启容器）。
+func (h *Handler) loginPoll(w http.ResponseWriter, r *http.Request) {
+	if h.loginFlow == nil {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "login_disabled", "面板登录未启用：config 缺少 auth_dir")
+		return
+	}
+	res := h.loginFlow.Poll(r.URL.Query().Get("state"))
+	out := map[string]any{"status": res.Status}
+	if res.Message != "" {
+		out["message"] = res.Message
+	}
+	if res.Status == "done" && res.Auth != nil {
+		a := res.Auth
+		if err := a.SaveAtomic(); err != nil {
+			writeOpenAIError(w, http.StatusInternalServerError, "login_save", "凭证落盘失败: "+err.Error())
+			return
+		}
+		h.cfg.Pool.Add(a) // 热加载：新账号立即可被调度，无需重启
+		total, _, _, _, _ := h.cfg.Pool.CountsDetailed()
+		out["uid"] = a.UID
+		out["nickname"] = a.Nickname
+		out["file"] = a.FilePath
+		out["total_accounts"] = total
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// checkinNow 手动触发全量签到（含余额刷新 + 解冻），返回逐账号结果。
+func (h *Handler) checkinNow(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.Scheduler == nil {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "no_scheduler", "调度器未配置")
+		return
+	}
+	results := h.cfg.Scheduler.RunCheckinReported()
+	ok, already, fail, skip := 0, 0, 0, 0
+	for _, rr := range results {
+		switch rr.Checkin {
+		case "OK":
+			ok++
+		case "ALREADY":
+			already++
+		case "FAIL":
+			fail++
+		default:
+			skip++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"results": results,
+		"summary": map[string]int{"ok": ok, "already": already, "fail": fail, "skip": skip},
+	})
+}
+
+// scheduleInfo 返回签到/keepalive 小时配置与下次自动签到时间（供面板展示）。
+func (h *Handler) scheduleInfo(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.Scheduler == nil {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "no_scheduler", "调度器未配置")
+		return
+	}
+	next := h.cfg.Scheduler.NextCheckinAt()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"checkin_hours":   h.cfg.Scheduler.CheckinHoursSnapshot(),
+		"keepalive_hours": h.cfg.Scheduler.KeepaliveHoursSnapshot(),
+		"next_checkin":    next.Unix(),
+		"next_checkin_at": next.Format("2006-01-02 15:04:05 MST"),
+		"server_time":     time.Now().Unix(),
+		"timezone":        time.Now().Format("MST -07:00"),
+	})
 }
 
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
