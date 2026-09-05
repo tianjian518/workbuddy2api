@@ -51,7 +51,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o wb2
 ### 自动发布流水线
 
 仓库内置 `.github/workflows/docker.yml`：推送 `master` 或打 `v*` 标签即触发，用 buildx 同时构建 **amd64 + arm64** 并推送多平台镜像到 Docker Hub。
-只需在仓库 `Settings → Secrets and variables → Actions` 中配置一个密钥 `DOCKERHUB_TOKEN`（Docker Hub 访问令牌）；流水线会用该令牌自动解析 Docker Hub 用户名，无需手动填写账号名。
+需在仓库 `Settings → Secrets and variables → Actions` 中配置两个密钥：`DOCKERHUB_USERNAME`（你的 Docker Hub 用户名）与 `DOCKERHUB_TOKEN`（Docker Hub 访问令牌）。
 
 ## 快速开始
 
