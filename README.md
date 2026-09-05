@@ -8,9 +8,9 @@
 - 🔄 **多账号轮转** — 三因子加权随机选号（credits ×闲置×成功率），防热点 + 防惊群（100ms 窗口）
 - 🛠 **工具调用** — 完整支持 OpenAI tools/tool_choice，流式 `tool_calls` 按 index 合并
 - 📡 **流式 + 非流式** — 上游 SSE 透传；非流式本地聚合（上游拒绝非流式请求）
-- ⏰ **定时签到** — 每日 09:00 / 21:00 自动签到 + 积分查询，积分耗尽账号次日 04:00 自动恢复
+- ⏰ **定时签到** — 默认每日 01:00 全量自动签到 + 积分查询（`checkin_hours` 可自定义），积分耗尽账号次日 04:00 自动恢复
 - 📊 **积分监控** — `credit.sh` 一键查询全部账号剩余/总量/百分比
-- 🔑 **登录工具** — `login.sh` 交互式登录，落盘即生效
+- 🔑 **面板内登录** — Web 面板一键登录/追加多账号（OAuth 授权自动落盘并热加载，无需重启）；`login.sh` 仍可作为 CLI 备选
 - 🏗 **Docker 部署** — 一键 `docker compose up`，healthcheck 常驻
 - 📈 **请求级日志** — 每个 `/v1/chat/completions` 请求打表格日志（seq/TTFB/uid/tokens/latency）
 - 🏥 **健康检查** — `/healthz` 无健康账号时返回 503，可接负载均衡器
@@ -64,7 +64,12 @@ cp config.example.json config.json
 # 编辑 config.json，设置 api_key
 ```
 
-### 2. 添加账号
+### 2. 添加账号（推荐：面板内登录）
+
+服务启动后打开 `http://IP:7863/`，在「登录 WorkBuddy 账号」区块点「＋ 登录 / 添加账号」：
+新标签页打开授权链接完成登录 → 面板自动检测并保存（凭证落盘 `auths/`，热加载进池，**无需重启**）。可反复点击添加多个账号。
+
+CLI 备选：
 
 ```bash
 ./login.sh
@@ -117,7 +122,7 @@ curl -s http://localhost:7863/v1/chat/completions \
     "soft_rate": "60s"
   },
   "schedule": {
-    "checkin_hours": [9, 21],
+    "checkin_hours": [1],
     "keepalive_hours": [22]
   },
   "upstream": {
@@ -162,7 +167,7 @@ Disabled ←────┘ (session 死亡，永久)
 
 | 错误类型 | 冷却策略 | 恢复方式 |
 |---|---|---|
-| **402 + 余额关键词** | 冷却到**次日 04:00** | 签到任务（09:00/21:00）自动恢复 |
+| **402 + 余额关键词** | 冷却到**次日 04:00** | 签到任务（默认每日 01:00）自动恢复 |
 | **429 限流** | 60s 短冷却 | 到期自动恢复 |
 | **401 + session 死亡** | **永久禁用** | 人工重新登录 |
 | **404 上游偶发** | 60s 短冷却（不累计错误计数） | 到期自动恢复 |
@@ -224,7 +229,11 @@ Disabled ←────┘ (session 死亡，永久)
 | `GET /v1/models` | Bearer | 模型列表（动态拉取 + 静态兜底） |
 | `GET /status` | Bearer | 账号状态汇总（total/healthy/cooling/disabled + 每账号详情） |
 | `GET /healthz` | 无 | 健康检查（无健康账号时 503） |
-| `GET /` | 无 | Web 管理面板首页（自包含单文件仪表盘，无需鉴权，展示账号状态/模型，可填 api_key 调用 `/status`、`/healthz`、`/v1/models`） |
+| `GET /` | 无 | Web 管理面板首页（自包含单文件仪表盘：账号状态/模型/**面板登录**/**每日签到**） |
+| `GET /api/login/start` | Bearer | 发起面板登录，返回 `{auth_url, state}`（浏览器打开 auth_url 完成授权） |
+| `GET /api/login/poll?state=` | Bearer | 轮询登录结果：pending → done（凭证落盘 `auths/` 并热加载进池，无需重启）/ expired / error |
+| `POST /api/checkin` | Bearer | 立即全量签到（签到 + 余额刷新 + 解冻），返回逐账号结果 |
+| `GET /api/schedule` | Bearer | 返回签到/keepalive 时点与下次自动签到时间 |
 
 ## 稳定性设计
 
