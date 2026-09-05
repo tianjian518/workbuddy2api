@@ -1,6 +1,10 @@
 services:
   wb2api:
+    # 方式一：本地构建（默认）。在宿主机架构上编译，ARM 机器会自动产出 arm64 镜像
     build: .
+    # 方式二：直接用已发布的预构建多平台镜像（amd64 / arm64 自动匹配宿主机架构）
+    # 把上面两行换成下面这一行，并把 <your-dockerhub-user> 改成你的 Docker Hub 用户名：
+    # image: <your-dockerhub-user>/workbuddy2api:latest
     container_name: workbuddy2api
     restart: unless-stopped
     environment:

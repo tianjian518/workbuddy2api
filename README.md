@@ -16,6 +16,43 @@
 - 🏥 **健康检查** — `/healthz` 无健康账号时返回 503，可接负载均衡器
 - 📉 **状态汇总** — `/status` 返回 total/healthy/cooling/disabled 计数 + 每账号完整画像
 
+## 多架构支持与 Docker Hub 镜像
+
+本项目基于 Go 静态编译（`CGO_ENABLED=0`），原生支持 **linux/amd64** 与 **linux/arm64** 双架构，可在树莓派、Mac M 系、ARM 服务器、飞牛 NAS 等设备上直接运行。
+
+### 方式 A：直接拉取预构建多平台镜像（推荐）
+
+已通过 GitHub Actions 自动构建并推送到 Docker Hub，amd64 / arm64 由 Docker 自动匹配宿主机架构：
+
+```bash
+# 把 <your-dockerhub-user> 换成实际发布的 Docker Hub 用户名
+docker run -d --name workbuddy2api -p 7863:7863 \
+  -v "$PWD/config.json:/app/config.json:ro" \
+  -v "$PWD/auths:/app/auths" -v "$PWD/data:/app/data" \
+  <your-dockerhub-user>/workbuddy2api:latest
+```
+
+或在 `docker-compose.yml` 中改用 `image: <your-dockerhub-user>/workbuddy2api:latest`（取消注释对应行）。
+
+### 方式 B：本地构建（自动适配当前架构）
+
+```bash
+docker compose up -d --build   # 在 ARM 机器上会自动产出 arm64 镜像
+```
+
+### 方式 C：交叉编译二进制（无需 Docker）
+
+```bash
+make build-arm64   # 产出 bin/wb2api-arm64（静态链接，拷到 ARM 设备直接 ./wb2api-arm64 运行）
+# 等价手动命令：
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o wb2api-arm64 ./cmd/server
+```
+
+### 自动发布流水线
+
+仓库内置 `.github/workflows/docker.yml`：推送 `master` 或打 `v*` 标签即触发，用 buildx 同时构建 **amd64 + arm64** 并推送多平台镜像到 Docker Hub。
+只需在仓库 `Settings → Secrets and variables → Actions` 中配置一个密钥 `DOCKERHUB_TOKEN`（Docker Hub 访问令牌）；流水线会用该令牌自动解析 Docker Hub 用户名，无需手动填写账号名。
+
 ## 快速开始
 
 ### 1. 克隆 & 配置

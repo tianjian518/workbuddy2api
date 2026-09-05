@@ -1,0 +1,58 @@
+name: docker
+
+# 触发：推送 master 分支、打 v* 标签、或手动 workflow_dispatch
+on:
+  push:
+    tags: ['v*']
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: workbuddy2api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 QEMU（多平台模拟，交叉编译场景可省）
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 用 Docker Hub Token 解析用户名
+        id: dockerhub
+        run: |
+          USER=$(curl -sS -H "Authorization: Bearer ${{ secrets.DOCKERHUB_TOKEN }}" https://hub.docker.com/v2/user/ | jq -r .username)
+          echo "username=$USER" >> "$GITHUB_OUTPUT"
+
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ steps.dockerhub.outputs.username }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 推导镜像标签
+        id: meta
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 构建并推送多平台镜像（amd64 + arm64）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.dockerhub.outputs.username }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+            ${{ steps.dockerhub.outputs.username }}/${{ env.IMAGE_NAME }}:latest
