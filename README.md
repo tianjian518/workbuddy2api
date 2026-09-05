@@ -224,6 +224,7 @@ Disabled ←────┘ (session 死亡，永久)
 | `GET /v1/models` | Bearer | 模型列表（动态拉取 + 静态兜底） |
 | `GET /status` | Bearer | 账号状态汇总（total/healthy/cooling/disabled + 每账号详情） |
 | `GET /healthz` | 无 | 健康检查（无健康账号时 503） |
+| `GET /` | 无 | Web 管理面板首页（自包含单文件仪表盘，无需鉴权，展示账号状态/模型，可填 api_key 调用 `/status`、`/healthz`、`/v1/models`） |
 
 ## 稳定性设计
 

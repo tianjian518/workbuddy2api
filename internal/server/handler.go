@@ -2,6 +2,7 @@
 package server
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
 	"io"
@@ -16,6 +17,9 @@ import (
 	"workbuddy2api/internal/session"
 	"workbuddy2api/internal/upstream"
 )
+
+//go:embed dashboard.html
+var dashboardFS embed.FS
 
 // Config handler 依赖。
 type Config struct {
@@ -55,11 +59,23 @@ func NewHandler(cfg Config) *Handler {
 	h.mux.HandleFunc("GET /v1/models", h.withAuth(h.models))
 	h.mux.HandleFunc("GET /status", h.withAuth(h.status))
 	h.mux.HandleFunc("GET /healthz", h.healthz)
+	h.mux.HandleFunc("GET /", h.dashboard)
 	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
+}
+
+func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
+	data, err := dashboardFS.ReadFile("dashboard.html")
+	if err != nil {
+		writeOpenAIError(w, http.StatusInternalServerError, "panel_load", "load dashboard.html failed: "+err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
