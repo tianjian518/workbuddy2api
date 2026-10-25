@@ -13,6 +13,7 @@ package pool
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand/v2"
 	"os"
@@ -420,7 +421,24 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 	}
 }
 
+// Remove 从池中剔除单个账号，并把剔除结果持久化回 state.json。
+// 不持久化的话，下次启动 load() 会从 state.json 把账号复活（凭证文件已不在，
+// 变成只有状态没有钥匙的僵尸条目）。调用方负责先删掉 auths 目录里的凭证文件。
+// 账号不存在时返回 error，便于调用方区分"已删过"与"删成功"。
+func (p *Pool) Remove(uid string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.byUID[uid]; !ok {
+		return fmt.Errorf("account not found: %s", uid)
+	}
+	delete(p.byUID, uid)
+	p.saveLocked() // 与 SyncToDir 剔除同口径：立刻落盘，杜绝重启复活
+	return nil
+}
+
 // upsertLocked 更新或插入单个账号；已存在则只换凭证、保留 credits/cooling 状态。
+// 注意：disabled 也在此被保留——重新登录后需显式调用 Reenable 解禁，
+// 否则会出现"凭证已换新但账号仍显示禁用"的坑（见 loginPoll 的 done 分支）。
 // 调用方必须已持有 p.mu；Add 与 SyncToDir 共用此 upsert 逻辑。
 func (p *Pool) upsertLocked(a *auth.Auth) {
 	if e, ok := p.byUID[a.UID]; ok {
@@ -748,6 +766,31 @@ func (p *Pool) ReenableIfCredits(uid string, remain int64) {
 		}
 		p.dirty.Store(true)
 	}
+}
+
+// Reenable 解除账号的禁用与冷却状态，供"重新登录成功"后调用。
+// 语义：用户重新走完 OAuth 授权，意味着拿到了一把全新的有效凭证，
+// 此前导致 disabled 的原因（session dead / 12153）已被这次登录解决，应当放行。
+// 与 reviveCoolingLocked 一致：不碰熔断器（fails/breakerUntil）——重新登录只证明
+// 凭证有效，不证明 chat 通道健康，熔断仍按自己的退避节奏到期或由 NoteSuccess 清零。
+// credits 一并清零由首次成功请求或签到刷新，避免沿用已失效账号的旧余额读数。
+// 返回是否确实解禁了一个账号（不存在或本就健康时返回 false）。
+func (p *Pool) Reenable(uid string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.byUID[uid]
+	if !ok {
+		return false
+	}
+	if !e.disabled && e.until.IsZero() && e.reason == "" {
+		return false
+	}
+	e.disabled = false
+	e.reason = ""
+	e.until = time.Time{}
+	e.coolKind = 0
+	p.dirty.Store(true)
+	return true
 }
 
 // NoteError 记录一次错误：喂入唯一的连续失败计数器 fails + 累计错误 errTotal。

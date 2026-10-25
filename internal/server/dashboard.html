@@ -20,6 +20,10 @@
   button{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
   button:hover{border-color:var(--accent)}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.act-relogin,button.act-remove{padding:4px 9px;font-size:12px;border-radius:6px}
+  button.act-remove{color:var(--red);border-color:var(--red)}
+  button.act-remove:hover{background:var(--red);color:#fff}
+  button:disabled{opacity:.5;cursor:not-allowed}
   main{max-width:1080px;margin:0 auto;padding:20px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
@@ -84,6 +88,7 @@
 
   <section>
     <h2><span class="dot" style="background:var(--blue)"></span>账号状态（/status）</h2>
+    <div id="acctResult" style="margin-bottom:10px"></div>
     <div id="accounts"></div>
   </section>
 
@@ -162,9 +167,25 @@ function renderAccounts(s){
       if(k==='status') v = statusBadge(v);
       cells += `<td class="k">${k}</td><td>${v ?? ''}</td>`;
     }
-    rows += `<tr>${cells}</tr>`;
+    // 已禁用账号才给操作入口：健康/冷却账号是可用资产，不给删。
+    let ops = '';
+    if(a.disabled === true){
+      const nick = (a.nickname && a.nickname!=='') ? a.nickname : a.uid;
+      ops = `<td><button class="act-relogin" data-uid="${a.uid}" data-nick="${nick}">重新登录</button> `+
+            `<button class="act-remove" data-uid="${a.uid}" data-nick="${nick}">删除</button></td>`;
+    } else {
+      ops = '<td class="muted">—</td>';
+    }
+    rows += `<tr>${cells}${ops}</tr>`;
   }
-  $('#accounts').innerHTML = `<table><tbody>${rows}</tbody></table>`;
+  $('#accounts').innerHTML = `<table><tbody>${rows}</tbody>`;
+  // 事件委托：按钮随表格重绘，逐个绑会漏
+  $('#accounts').querySelectorAll('.act-relogin').forEach(b=>{
+    b.onclick = ()=> reloginAccount(b.dataset.uid, b.dataset.nick);
+  });
+  $('#accounts').querySelectorAll('.act-remove').forEach(b=>{
+    b.onclick = ()=> removeAccount(b.dataset.uid, b.dataset.nick);
+  });
 }
 
 function renderModels(m){
@@ -247,6 +268,38 @@ async function pollLogin(){
   }
 }
 $('#loginBtn').onclick = startLogin;
+
+// ---- 禁用账号处置 ----
+function acctMsg(html, ok){
+  $('#acctResult').innerHTML = `<div class="${ok?'':'err'}" style="margin:2px 0">${html}</div>`;
+}
+
+// 重新登录：复用现有 OAuth 流程。登录成功后服务端会覆盖凭证并自动解禁，
+// 无需先删账号——upsert 只换凭证，解禁由 /api/login/poll 的 done 分支负责。
+async function reloginAccount(uid, nick){
+  if(!confirm(`重新登录「${nick}」？\n\n会在新标签页打开授权页，登录完成后凭证自动覆盖并解除禁用。`)) return;
+  acctMsg(`正在为「${nick}」发起重新授权…`, true);
+  await startLogin();
+}
+
+// 删除：仅禁用账号可用。删 auths 凭证文件 + 池内剔除（state.json 同步落盘，重启不复活）。
+async function removeAccount(uid, nick){
+  if(!confirm(`确定删除已禁用的账号「${nick}」？\n\n将删除其凭证文件，需重新「＋ 登录」才能恢复。`)) return;
+  acctMsg(`正在删除「${nick}」…`, true);
+  try {
+    const r = await fetch('/api/accounts/remove', {
+      method:'POST',
+      headers:{...authHeaders(), 'Content-Type':'application/json'},
+      body: JSON.stringify({uid})
+    });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw d;
+    acctMsg(`✅ 已删除「${nick}」。剩余账号 ${d.remaining ?? '-'} 个。`, true);
+    load();
+  } catch(e){
+    acctMsg(`❌ 删除失败：${errText(e)}`, false);
+  }
+}
 
 // ---- 每日签到 ----
 async function loadSchedule(){

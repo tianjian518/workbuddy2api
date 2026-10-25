@@ -69,6 +69,8 @@ cp config.example.json config.json
 服务启动后打开 `http://IP:7863/`，在「登录 WorkBuddy 账号」区块点「＋ 登录 / 添加账号」：
 新标签页打开授权链接完成登录 → 面板自动检测并保存（凭证落盘 `auths/`，热加载进池，**无需重启**）。可反复点击添加多个账号。
 
+同 uid 重复登录会**覆盖更新凭证**；若该账号此前处于 `disabled`（session dead），覆盖后**自动解除禁用**，无需手动删号重启。账号状态表里被禁用的账号行也可直接点「重新登录」走同一流程。
+
 CLI 备选：
 
 ```bash
@@ -234,6 +236,18 @@ Disabled ←────┘ (session 死亡，永久)
 | `GET /api/login/poll?state=` | Bearer | 轮询登录结果：pending → done（凭证落盘 `auths/` 并热加载进池，无需重启）/ expired / error |
 | `POST /api/checkin` | Bearer | 立即全量签到（签到 + 余额刷新 + 解冻），返回逐账号结果 |
 | `GET /api/schedule` | Bearer | 返回签到/keepalive 时点与下次自动签到时间 |
+| `POST /api/accounts/remove` | Bearer | 删除**已禁用**账号：删 `auths/` 凭证文件 + 池内剔除（`state.json` 同步落盘，重启不复活）。仅接受 `disabled` 账号，健康/冷却账号返回 400 防误删 |
+
+### 账号被禁用（session dead）后怎么办
+
+上游返回 `12153 Offline user session not found` 时，该账号的 access/refresh token 会被**一起作废**，账号进入 `disabled` 且**不会自愈**（签到、重启都救不回，因为本地那把钥匙已经打不开门）。两种处置方式，面板上都有对应按钮：
+
+1. **重新登录**（推荐）：点该账号行的「重新登录」→ 新标签页完成授权 → 凭证自动覆盖 + **自动解除禁用**，账号立刻恢复可用。不需要先删号。
+2. **删除**：确认不再用这个号，点「删除」清掉凭证文件与池内记录。
+
+> 历史坑：早期版本重新登录只覆盖凭证、不清 `disabled` 标志，导致"登完了但账号还是禁用的"。现已修复——`/api/login/poll` 的 `done` 分支会显式解禁。
+
+> ⚠️ **一个账号的凭证只能被一处持有。** 上游每次刷新会轮换 refresh_token，若把 `auths/` 目录原样拷贝到第二台机器，两边各自轮换出的新值互不知情，会持续互相作废，最终 session 被判失效。多机部署请在各机器上**分别走面板登录授权**，不要拷贝 `auths/`。
 
 ## 稳定性设计
 

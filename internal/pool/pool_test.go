@@ -342,6 +342,65 @@ func TestDisablePersists(t *testing.T) {
 	}
 }
 
+func TestRemoveDropsAccountAndPersists(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "state.json")
+	p := New(fp)
+	p.Add(&auth.Auth{UID: "u1"})
+	p.Add(&auth.Auth{UID: "u2"})
+	p.SetCredits("u1", 100)
+	p.SetCredits("u2", 200)
+
+	if err := p.Remove("u1"); err != nil {
+		t.Fatalf("Remove(u1): %v", err)
+	}
+	if err := p.Remove("u1"); err == nil {
+		t.Error("second Remove should report not-found")
+	}
+	if p.Pick() == nil || p.Pick().UID != "u2" {
+		t.Fatalf("pick=%v want u2", p.Pick())
+	}
+
+	// 关键：剔除必须落盘，否则重启后 load() 会把账号复活成"有状态无凭证"的僵尸条目。
+	p2 := New(fp)
+	p2.SyncToDir([]*auth.Auth{{UID: "u2"}}) // u1 的凭证文件已不在
+	if _, ok := p2.Status("u1"); ok {
+		t.Error("u1 resurrected from state.json after Remove")
+	}
+	if _, ok := p2.Status("u2"); !ok {
+		t.Error("u2 should survive")
+	}
+}
+
+func TestReenableClearsDisabled(t *testing.T) {
+	p := New("")
+	p.Add(&auth.Auth{UID: "u1"})
+	p.SetCredits("u1", 100)
+	p.Disable("u1", "12153 session dead")
+	if p.Pick() != nil {
+		t.Fatal("disabled account should not be picked")
+	}
+
+	if !p.Reenable("u1") {
+		t.Fatal("Reenable should report it re-enabled something")
+	}
+	st, _ := p.Status("u1")
+	if st.Disabled || st.Reason != "" {
+		t.Errorf("status=%+v want disabled cleared", st)
+	}
+	if p.Pick() == nil {
+		t.Error("re-enabled account should be pickable again")
+	}
+
+	// 幂等：已健康的账号再调一次返回 false，不制造无谓落盘。
+	if p.Reenable("u1") {
+		t.Error("Reenable on healthy account should return false")
+	}
+	if p.Reenable("no-such-uid") {
+		t.Error("Reenable on missing account should return false")
+	}
+}
+
 func TestReenableIfCredits(t *testing.T) {
 	p := New("")
 	p.Add(&auth.Auth{UID: "u1"})

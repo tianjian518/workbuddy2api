@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -872,4 +873,183 @@ func TestStatusRequiresAuth(t *testing.T) {
 	if rec.Code != 200 {
 		t.Errorf("healthz: code=%d", rec.Code)
 	}
+}
+
+// ---- 禁用账号删除（POST /api/accounts/remove）----
+
+// disabledPoolWith 构建含一个禁用账号 + 一个健康账号的池，凭证文件真实落盘到 dir。
+func disabledPoolWith(t *testing.T, dir string) (*pool.Pool, string, string) {
+	t.Helper()
+	badFP := filepath.Join(dir, "workbuddy-u-bad.json")
+	goodFP := filepath.Join(dir, "workbuddy-u-good.json")
+	for _, fp := range []string{badFP, goodFP} {
+		if err := os.WriteFile(fp, []byte(`{"accessToken":"at"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := pool.New(filepath.Join(dir, "state.json"))
+	p.Add(&auth.Auth{UID: "u-bad", FilePath: badFP})
+	p.Add(&auth.Auth{UID: "u-good", FilePath: goodFP})
+	p.Disable("u-bad", "12153 session dead")
+	return p, badFP, goodFP
+}
+
+func doRemove(t *testing.T, h *Handler, key, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("POST", "/api/accounts/remove", strings.NewReader(body))
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestAccountRemoveRequiresAuth(t *testing.T) {
+	dir := t.TempDir()
+	p, _, _ := disabledPoolWith(t, dir)
+	h := NewHandler(Config{Pool: p, Upstream: upstream.New(), APIKey: "secret", AuthDir: dir})
+
+	rec := doRemove(t, h, "", `{"uid":"u-bad"}`)
+	if rec.Code != 401 {
+		t.Errorf("no key: code=%d want 401", rec.Code)
+	}
+	rec = doRemove(t, h, "wrong", `{"uid":"u-bad"}`)
+	if rec.Code != 401 {
+		t.Errorf("wrong key: code=%d want 401", rec.Code)
+	}
+}
+
+func TestAccountRemoveRejectsHealthy(t *testing.T) {
+	dir := t.TempDir()
+	p, _, goodFP := disabledPoolWith(t, dir)
+	h := NewHandler(Config{Pool: p, Upstream: upstream.New(), APIKey: "k", AuthDir: dir})
+
+	rec := doRemove(t, h, "k", `{"uid":"u-good"}`)
+	if rec.Code != 400 {
+		t.Fatalf("healthy remove: code=%d want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "not_disabled") {
+		t.Errorf("body=%s", rec.Body.String())
+	}
+	// 健康账号的凭证文件必须原封不动
+	if _, err := os.Stat(goodFP); err != nil {
+		t.Errorf("healthy auth file should survive: %v", err)
+	}
+}
+
+func TestAccountRemoveRejectsUnknownAndBadBody(t *testing.T) {
+	dir := t.TempDir()
+	p, _, _ := disabledPoolWith(t, dir)
+	h := NewHandler(Config{Pool: p, Upstream: upstream.New(), APIKey: "k", AuthDir: dir})
+
+	if rec := doRemove(t, h, "k", `{"uid":"nope"}`); rec.Code != 404 {
+		t.Errorf("unknown uid: code=%d want 404", rec.Code)
+	}
+	if rec := doRemove(t, h, "k", `{"uid":""}`); rec.Code != 400 {
+		t.Errorf("empty uid: code=%d want 400", rec.Code)
+	}
+	if rec := doRemove(t, h, "k", `not json`); rec.Code != 400 {
+		t.Errorf("bad body: code=%d want 400", rec.Code)
+	}
+}
+
+func TestAccountRemoveDeletesFileAndPool(t *testing.T) {
+	dir := t.TempDir()
+	p, badFP, _ := disabledPoolWith(t, dir)
+	h := NewHandler(Config{Pool: p, Upstream: upstream.New(), APIKey: "k", AuthDir: dir})
+
+	rec := doRemove(t, h, "k", `{"uid":"u-bad"}`)
+	if rec.Code != 200 {
+		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(badFP); !os.IsNotExist(err) {
+		t.Error("disabled auth file should be deleted")
+	}
+	if _, ok := p.Status("u-bad"); ok {
+		t.Error("u-bad should be gone from pool")
+	}
+	if _, ok := p.Status("u-good"); !ok {
+		t.Error("u-good should remain in pool")
+	}
+	if !strings.Contains(rec.Body.String(), `"remaining":1`) {
+		t.Errorf("body=%s", rec.Body.String())
+	}
+
+	// 重启模拟：state.json 里不该残留 u-bad，否则会被 load() 复活
+	p2 := pool.New(filepath.Join(dir, "state.json"))
+	p2.SyncToDir([]*auth.Auth{{UID: "u-good", FilePath: filepath.Join(dir, "workbuddy-u-good.json")}})
+	if _, ok := p2.Status("u-bad"); ok {
+		t.Error("u-bad resurrected after restart")
+	}
+}
+
+func TestAccountRemoveRejectsPathOutsideAuthDir(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(dir, "secret.json")
+	if err := os.WriteFile(outside, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	authDir := filepath.Join(dir, "auths")
+	if err := os.MkdirAll(authDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := pool.New(filepath.Join(authDir, "state.json"))
+	// 恶意/错配的 FilePath 指向 authDir 之外
+	p.Add(&auth.Auth{UID: "u-bad", FilePath: outside})
+	p.Disable("u-bad", "12153 session dead")
+	h := NewHandler(Config{Pool: p, Upstream: upstream.New(), APIKey: "k", AuthDir: authDir})
+
+	rec := doRemove(t, h, "k", `{"uid":"u-bad"}`)
+	if rec.Code != 400 {
+		t.Fatalf("code=%d want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "path_outside_auth_dir") {
+		t.Errorf("body=%s", rec.Body.String())
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Errorf("file outside auth_dir must NOT be deleted: %v", err)
+	}
+}
+
+func TestAccountRemoveDisabledWhenNoAuthDir(t *testing.T) {
+	dir := t.TempDir()
+	p, _, _ := disabledPoolWith(t, dir)
+	h := NewHandler(Config{Pool: p, Upstream: upstream.New(), APIKey: "k"}) // AuthDir 空
+
+	if rec := doRemove(t, h, "k", `{"uid":"u-bad"}`); rec.Code != 503 {
+		t.Errorf("code=%d want 503", rec.Code)
+	}
+}
+
+func TestLoginReenablesDisabledAccount(t *testing.T) {
+	dir := t.TempDir()
+	authDir := filepath.Join(dir, "auths")
+	if err := os.MkdirAll(authDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := pool.New(filepath.Join(authDir, "state.json"))
+	p.Add(&auth.Auth{UID: "u1", FilePath: filepath.Join(authDir, "workbuddy-u1.json")})
+	p.SetCredits("u1", 100)
+	p.Disable("u1", "12153 session dead")
+
+	h := NewHandler(Config{Pool: p, Upstream: upstream.New(), APIKey: "k", AuthDir: authDir})
+
+	// 直接走 upsert 路径（等价于 loginPoll done → SaveAtomic + Add 的池内效果）
+	// 单独 upsert 不该解禁（这是历史 bug 的行为），必须显式 Reenable。
+	p.Add(&auth.Auth{UID: "u1", FilePath: filepath.Join(authDir, "workbuddy-u1.json")})
+	if st, _ := p.Status("u1"); !st.Disabled {
+		t.Fatal("precondition: upsert alone must keep disabled (documents the old bug)")
+	}
+	if !p.Reenable("u1") {
+		t.Fatal("Reenable should clear disabled after re-login")
+	}
+	st, _ := p.Status("u1")
+	if st.Disabled || st.Reason != "" {
+		t.Errorf("status=%+v", st)
+	}
+	if p.Pick() == nil {
+		t.Error("re-logged-in account should be servable again")
+	}
+	_ = h // handler 构造仅验证 AuthDir 装配无误
 }

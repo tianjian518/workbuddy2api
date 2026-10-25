@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +76,7 @@ func NewHandler(cfg Config) *Handler {
 	h.mux.HandleFunc("GET /api/login/poll", h.withAuth(h.loginPoll))
 	h.mux.HandleFunc("POST /api/checkin", h.withAuth(h.checkinNow))
 	h.mux.HandleFunc("GET /api/schedule", h.withAuth(h.scheduleInfo))
+	h.mux.HandleFunc("POST /api/accounts/remove", h.withAuth(h.removeAccount))
 	return h
 }
 
@@ -124,13 +127,97 @@ func (h *Handler) loginPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.cfg.Pool.Add(a) // 热加载：新账号立即可被调度，无需重启
+		// upsert 只换凭证、保留 disabled，这里必须显式解禁：
+		// 用户刚走完 OAuth 拿到新凭证，此前导致禁用的 session dead 已被这次登录解决。
+		// 少了这一步，重新登录后账号会一直显示禁用、永远选不中（历史 bug）。
+		if h.cfg.Pool.Reenable(a.UID) {
+			log.Printf("login: account %s re-enabled after re-login", a.UID)
+		}
 		total, _, _, _, _ := h.cfg.Pool.CountsDetailed()
 		out["uid"] = a.UID
 		out["nickname"] = a.Nickname
 		out["file"] = a.FilePath
 		out["total_accounts"] = total
+		out["reenabled"] = true
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// removeAccount 删除一个"已禁用"的账号：删 auths 目录凭证文件 + 从池中剔除。
+//
+// 只允许删 disabled 账号——健康/冷却账号是能用的资产，误删要重新授权，
+// 代价不对等；禁用账号的凭证已被上游作废（session dead），删掉才是唯一处置。
+//
+// 安全：FilePath 一律取池内 Auth 记录而非自行拼路径，并强制校验其落在 AuthDir 之下，
+// 杜绝路径穿越把 AuthDir 外的文件删掉。
+func (h *Handler) removeAccount(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.AuthDir == "" {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "remove_disabled", "未配置 auth_dir，无法删除账号")
+		return
+	}
+	var body struct {
+		UID string `json:"uid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeOpenAIError(w, http.StatusBadRequest, "bad_body", "请求体不是合法 JSON: "+err.Error())
+		return
+	}
+	uid := strings.TrimSpace(body.UID)
+	if uid == "" {
+		writeOpenAIError(w, http.StatusBadRequest, "missing_uid", "缺少 uid")
+		return
+	}
+
+	st, ok := h.cfg.Pool.Status(uid)
+	if !ok {
+		writeOpenAIError(w, http.StatusNotFound, "account_not_found", "账号不存在: "+uid)
+		return
+	}
+	if !st.Disabled {
+		writeOpenAIError(w, http.StatusBadRequest, "not_disabled",
+			"仅允许删除已禁用的账号（该账号当前可用）。健康账号删除需走重新登录覆盖。")
+		return
+	}
+
+	a := h.cfg.Pool.AuthByUID(uid)
+	fp := ""
+	if a != nil {
+		fp = a.FilePath
+	}
+	if fp == "" {
+		writeOpenAIError(w, http.StatusConflict, "no_file_path", "该账号没有关联的凭证文件路径，请手动清理 auths 目录")
+		return
+	}
+	// 路径穿越防护：只准删 AuthDir 底下的文件。
+	cleanFP := filepath.Clean(fp)
+	cleanDir := filepath.Clean(h.cfg.AuthDir)
+	if cleanFP == cleanDir || !strings.HasPrefix(cleanFP, cleanDir+string(os.PathSeparator)) {
+		writeOpenAIError(w, http.StatusBadRequest, "path_outside_auth_dir",
+			"凭证文件不在 auth_dir 内，拒绝删除: "+fp)
+		return
+	}
+
+	if err := os.Remove(cleanFP); err != nil && !os.IsNotExist(err) {
+		writeOpenAIError(w, http.StatusInternalServerError, "remove_file", "删除凭证文件失败: "+err.Error())
+		return
+	}
+	if err := h.cfg.Pool.Remove(uid); err != nil {
+		// 文件已删但池内剔除失败：不向用户谎报成功，提示重启对齐。
+		writeOpenAIError(w, http.StatusInternalServerError, "remove_pool",
+			"凭证文件已删除，但从池中剔除失败（重启后会自动对齐）: "+err.Error())
+		return
+	}
+
+	total, healthy, cooling, disabled, _ := h.cfg.Pool.CountsDetailed()
+	log.Printf("account removed: uid=%s file=%s remaining=%d", uid, cleanFP, total)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"removed":   uid,
+		"file":      cleanFP,
+		"remaining": total,
+		"counts": map[string]int{
+			"total": total, "healthy": healthy, "cooling": cooling, "disabled": disabled,
+		},
+	})
 }
 
 // checkinNow 手动触发全量签到（含余额刷新 + 解冻），返回逐账号结果。
