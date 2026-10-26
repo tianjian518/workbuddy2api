@@ -6,100 +6,175 @@
 <title>WorkBuddy2API 面板</title>
 <style>
   :root{
-    --bg:#0f1115;--card:#181b22;--line:#262b36;--txt:#e6e9ef;--muted:#8b93a7;
-    --green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff;--accent:#7c5cff;
+    --bg:#e8f1fc;--card:#ffffff;--line:#cfe0f5;--txt:#1b2333;--muted:#64748b;
+    --green:#12a05c;--green-soft:#e8f7ef;--yellow:#c47b00;--yellow-soft:#fff6e3;
+    --red:#d03b3b;--red-soft:#fdeeee;--blue:#2b5cff;--blue-soft:#eef3ff;--accent:#7c5cff;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
-  header{position:sticky;top:0;background:rgba(15,17,21,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;z-index:10}
+  body{margin:0;color:var(--txt);
+    background:
+      radial-gradient(1100px 520px at 12% -12%, #ffffff 0%, rgba(255,255,255,0) 62%),
+      radial-gradient(900px 460px at 100% 0%, #d9eaff 0%, rgba(217,234,255,0) 58%),
+      linear-gradient(180deg,#eaf2fd 0%, #dfeafb 55%, #e6f0fc 100%);
+    background-attachment:fixed;
+    font:14px/1.65 "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+    -webkit-font-smoothing:antialiased}
+
+  /* 顶栏 */
+  header{position:sticky;top:0;background:rgba(255,255,255,.93);backdrop-filter:blur(10px);
+    border-bottom:1px solid #cfe0f5;box-shadow:0 2px 12px rgba(43,92,255,.06);
+    padding:12px 20px;display:flex;flex-wrap:wrap;gap:12px;
+    align-items:center;z-index:10}
   header h1{font-size:16px;margin:0;font-weight:600}
   header h1 span{color:var(--accent)}
-  .key{display:flex;gap:8px;align-items:center;margin-left:auto}
-  .key input{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;width:240px;outline:none}
-  .key input:focus{border-color:var(--accent)}
-  button{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
-  button:hover{border-color:var(--accent)}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-  button.act-relogin,button.act-remove{padding:4px 9px;font-size:12px;border-radius:6px}
-  button.act-remove{color:var(--red);border-color:var(--red)}
-  button.act-remove:hover{background:var(--red);color:#fff}
+  .key{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap}
+  .key input{background:#fbfcfe;border:1px solid var(--line);color:var(--txt);border-radius:9px;
+    padding:7px 11px;width:220px;outline:none;font-size:13px}
+  .key input:focus{border-color:var(--accent);background:#fff}
+  .switch{display:flex;gap:5px;align-items:center;cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none}
+  .switch input{width:14px;height:14px;cursor:pointer}
+
+  button{background:#eef1f6;border:none;color:var(--txt);border-radius:9px;padding:8px 14px;
+    cursor:pointer;font-size:13px;font-family:inherit;transition:.15s}
+  button:hover{filter:brightness(.97)}
+  button.primary{background:var(--accent);color:#fff}
+  button.primary:hover{background:#6b4cf0}
+  button.act-relogin{background:var(--blue-soft);color:var(--blue);padding:4px 10px;font-size:12px;border-radius:7px}
+  button.act-remove{background:var(--red-soft);color:var(--red);padding:4px 10px;font-size:12px;border-radius:7px}
   button:disabled{opacity:.5;cursor:not-allowed}
-  main{max-width:1080px;margin:0 auto;padding:20px}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
-  .card .v{font-size:26px;font-weight:700;line-height:1.1}
+
+  main{max-width:980px;margin:0 auto;padding:20px 18px 60px}
+
+  /* 顶部数据卡 */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+    box-shadow:0 2px 8px rgba(43,92,255,.07)}
+  .card .v{font-size:25px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
   .card .l{color:var(--muted);font-size:12px;margin-top:4px}
   .card.green .v{color:var(--green)} .card.yellow .v{color:var(--yellow)}
   .card.red .v{color:var(--red)} .card.blue .v{color:var(--blue)}
-  section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:18px}
-  section h2{font-size:14px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
-  section h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{color:var(--muted);font-weight:600;white-space:nowrap}
-  td.k{color:var(--muted);white-space:nowrap;width:1%}
-  .badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line)}
-  .badge.healthy{color:var(--green);border-color:var(--green)}
-  .badge.cooling{color:var(--yellow);border-color:var(--yellow)}
-  .badge.disabled{color:var(--red);border-color:var(--red)}
-  .pill{display:inline-block;background:#0d1117;border:1px solid var(--line);border-radius:6px;padding:2px 8px;margin:3px 4px 0 0;font-size:12px}
-  .empty{color:var(--muted);font-size:13px;padding:6px 0}
-  .err{color:var(--red);font-size:13px}
-  .muted{color:var(--muted)}
+
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;
+    margin-bottom:16px;box-shadow:0 3px 14px rgba(43,92,255,.07)}
+  section h2{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px;font-weight:600;flex-wrap:wrap}
+  section h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+  .sec-hint{font-size:12px;color:var(--muted);margin:0 0 14px}
+
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  code{background:#0d1117;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
+  .muted{color:var(--muted)}
+  .err{color:var(--red);font-size:13px}
+  .empty{color:var(--muted);font-size:13px;padding:6px 0}
+  code{background:#f1f3f7;border-radius:5px;padding:1px 6px;font-size:12px}
+
+  /* 账号卡片：四边醒目描边，颜色随状态 */
+  .acct{border:2px solid var(--green);border-radius:14px;padding:15px 17px;margin-bottom:14px;
+    background:linear-gradient(180deg,#ffffff 0%, #f7fbff 100%);
+    box-shadow:0 3px 12px rgba(18,160,92,.16);position:relative;overflow:hidden;
+    border-left-width:6px}
+  .acct:last-child{margin-bottom:0}
+  .acct.ok{border-color:#12a05c;box-shadow:0 3px 12px rgba(18,160,92,.18)}
+  .acct.cool{border-color:#e0a020;box-shadow:0 3px 12px rgba(224,160,32,.20)}
+  .acct.bad{border-color:#e05555;box-shadow:0 3px 12px rgba(224,85,85,.18)}
+  .acct::before{content:'';position:absolute;left:0;top:0;right:0;height:3px}
+  .acct.ok::before{background:linear-gradient(90deg,#12a05c,#5ad39a)}
+  .acct.cool::before{background:linear-gradient(90deg,#e0a020,#f7d774)}
+  .acct.bad::before{background:linear-gradient(90deg,#e05555,#f79b9b)}
+  .a-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .a-name{font-size:15px;font-weight:600;line-height:1.35}
+  .a-badge{font-size:12px;padding:2px 9px;border-radius:999px;font-weight:500;white-space:nowrap}
+  .a-badge.ok{background:var(--green-soft);color:var(--green)}
+  .a-badge.cool{background:var(--yellow-soft);color:var(--yellow)}
+  .a-badge.bad{background:var(--red-soft);color:var(--red)}
+  .a-ops{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap}
+  .a-uid{font-size:11.5px;color:#a0a9b8;margin-top:2px;word-break:break-all;font-family:ui-monospace,Consolas,monospace}
+  /* 关键属性：一行三格，窄屏自动换行 */
+  .a-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:12px}
+  .a-kv{background:#f4f9ff;border:1px solid #d8e8fb;border-radius:9px;padding:8px 11px}
+  .a-kv .k{font-size:11px;color:var(--muted);margin-bottom:1px}
+  .a-kv .v{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums}
+  .a-kv .v.big{font-size:16px;color:var(--blue)}
+  .a-err{margin-top:10px;background:var(--red-soft);border:1px solid #f3c9c9;border-radius:8px;
+    padding:7px 11px;font-size:12.5px;color:#8f2626;line-height:1.6}
+
+  /* 签到结果 */
+  .sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .sum span{font-size:12.5px;padding:4px 11px;border-radius:999px;background:#f1f3f7;color:var(--muted)}
+  .sum span.ok{background:var(--green-soft);color:var(--green)}
+  .sum span.al{background:var(--yellow-soft);color:var(--yellow)}
+  .sum span.bad{background:var(--red-soft);color:var(--red)}
+  .ck-item{border-left:3px solid var(--line);padding:6px 0 6px 11px;margin-bottom:8px;font-size:13px}
+  .ck-item.ok{border-color:var(--green)}
+  .ck-item.al{border-color:var(--yellow)}
+  .ck-item.bad{border-color:var(--red)}
+  .ck-item .t{font-weight:600}
+  .ck-item .d{font-size:12px;color:var(--muted);line-height:1.6;word-break:break-word}
+
+  /* 模型 */
+  .pill{display:inline-block;background:var(--blue-soft);border:1px solid #d8e6ff;border-radius:7px;
+    padding:3px 10px;margin:3px 5px 0 0;font-size:12px;color:#2c3e66}
+
+  details{margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+  details summary{cursor:pointer;font-size:12.5px;color:var(--blue);outline:none;list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸ ";font-weight:700}
+  details[open] summary::before{content:"▾ "}
+  details pre{background:#141a26;color:#a5f3fc;border-radius:10px;padding:12px 14px;font-size:12px;
+    line-height:1.7;overflow:auto;max-height:340px;white-space:pre-wrap;word-break:break-word;
+    margin:10px 0 0;font-family:ui-monospace,Consolas,monospace}
 </style>
 </head>
 <body>
 <header>
   <h1>WorkBuddy<span>2API</span> 面板</h1>
   <div class="key">
-    <input id="apikey" type="password" placeholder="在此粘贴 config.json 的 api_key" autocomplete="off">
-    <button id="saveKey">保存</button>
+    <input id="apikey" type="password" placeholder="粘贴 config.json 里的 api_key" autocomplete="off">
+    <button id="saveKey" class="primary">保存</button>
     <button id="refresh">刷新</button>
-    <label class="muted" style="display:flex;gap:5px;align-items:center;cursor:pointer">
-      <input id="auto" type="checkbox" checked> 自动(10s)
-    </label>
+    <label class="switch"><input id="auto" type="checkbox" checked> 自动刷新 10 秒</label>
   </div>
 </header>
 <main>
   <div class="cards" id="cards"></div>
 
   <section>
-    <h2><span class="dot" style="background:var(--accent)"></span>登录 WorkBuddy 账号（支持多账号）</h2>
+    <h2><span class="dot" style="background:var(--accent)"></span>登录账号</h2>
+    <p class="sec-hint">一次登一个，可以反复点添加多个。同一个账号重复登录只会更新凭证，不会重复添加。</p>
     <div class="row">
       <button id="loginBtn" class="primary">＋ 登录 / 添加账号</button>
-      <span class="muted">每次登录一个账号，可反复点击添加多个；同 uid 重复登录会覆盖更新凭证。</span>
     </div>
     <div id="loginBox" style="margin-top:12px;display:none">
-      <div>1. 在新标签页打开 <a id="loginUrl" target="_blank" rel="noopener" style="color:var(--blue);word-break:break-all"></a></div>
-      <div style="margin-top:6px">2. 在该页面完成登录，这里会自动检测并保存：<span id="loginStatus" class="muted">等待登录…</span></div>
+      <div style="font-size:13px">1. 在新标签页打开授权页：</div>
+      <div style="margin-top:3px"><a id="loginUrl" target="_blank" rel="noopener" style="color:var(--blue);word-break:break-all;font-size:12.5px"></a></div>
+      <div style="margin-top:8px;font-size:13px">2. 在页面里完成登录，这里会自动保存：<span id="loginStatus" class="muted">等待登录…</span></div>
     </div>
   </section>
 
   <section>
     <h2><span class="dot" style="background:var(--yellow)"></span>每日签到</h2>
+    <p class="sec-hint" id="scheduleInfo">加载中…</p>
     <div class="row">
       <button id="checkinBtn" class="primary">立即全量签到</button>
-      <span id="scheduleInfo" class="muted">加载中…</span>
     </div>
-    <div id="checkinResult" style="margin-top:12px"></div>
+    <div id="checkinResult" style="margin-top:14px"></div>
   </section>
 
   <section>
-    <h2><span class="dot" style="background:var(--blue)"></span>账号状态（/status）</h2>
+    <h2><span class="dot" style="background:var(--blue)"></span>账号状态</h2>
+    <p class="sec-hint">每个账号一行，只显示关键信息。已禁用的账号才有「重新登录 / 删除」按钮。</p>
     <div id="acctResult" style="margin-bottom:10px"></div>
     <div id="accounts"></div>
   </section>
 
   <section>
-    <h2><span class="dot" style="background:var(--green)"></span>可用模型（/v1/models）</h2>
+    <h2><span class="dot" style="background:var(--green)"></span>可用模型</h2>
+    <p class="sec-hint">接口 <code>/v1/models</code> 返回的模型列表。</p>
     <div id="models"></div>
   </section>
 
   <section>
-    <h2><span class="dot"></span>原始 /status JSON</h2>
-    <pre id="raw" class="muted" style="white-space:pre-wrap;word-break:break-word;margin:0"></pre>
+    <h2><span class="dot"></span>原始数据</h2>
+    <p class="sec-hint">给排查问题用的原始 JSON，平时不用看。</p>
+    <div id="rawBox"></div>
   </section>
 </main>
 
@@ -107,6 +182,9 @@
 const $ = s => document.querySelector(s);
 let timer = null;
 
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function getKey(){
   return $('#apikey').value.trim() || localStorage.getItem('wb2api_key') || '';
 }
@@ -130,56 +208,115 @@ async function getJSON(url){
   return r.json();
 }
 
+/* ---------- 时间处理 ---------- */
+// 后端零值时间 0001-01-01 一律当"没有"
+function hasTime(v){
+  return !!v && !String(v).startsWith('0001-01-01');
+}
+// ISO 转本地可读：2026-10-26 10:09
+function fmtTime(v){
+  if(!hasTime(v)) return null;
+  const d = new Date(v);
+  if(isNaN(d)) return String(v);
+  const p = n => String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+// 多久以前：3 分钟前 / 2 小时前
+function ago(v){
+  if(!hasTime(v)) return null;
+  const d = new Date(v);
+  if(isNaN(d)) return null;
+  const s = Math.floor((Date.now()-d.getTime())/1000);
+  if(s < 0) return '刚刚';
+  if(s < 60) return s+' 秒前';
+  if(s < 3600) return Math.floor(s/60)+' 分钟前';
+  if(s < 86400) return Math.floor(s/3600)+' 小时前';
+  return Math.floor(s/86400)+' 天前';
+}
+
+/* ---------- 状态中文化 ---------- */
+function acctState(a){
+  if(a.disabled === true) return {cls:'bad',  text:'已被禁用'};
+  if(a.cooling === true)  return {cls:'cool', text:'冷却中'};
+  return {cls:'ok', text:'正常可用'};
+}
+// 上游英文报错翻成人话
+function reasonCn(r){
+  if(!r) return '登录凭证已失效，需要重新登录';
+  const s = String(r);
+  if(/session dead/i.test(s)) return '登录已过期（session dead），要重新登录';
+  if(/unauthor|401/i.test(s))  return '凭证无效或已过期，要重新登录';
+  if(/12153/.test(s))          return '账号登录状态失效（错误码 12153），要重新登录';
+  if(/rate|429/i.test(s))      return '请求太频繁，被限流了，等一会儿会自动恢复';
+  return s;
+}
+
+/* ---------- 顶部数字 ---------- */
 function card(cls, v, l){
   return `<div class="card ${cls}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
 }
-
 function renderCards(s, hz){
   const cards = [];
-  cards.push(card('green', s.healthy ?? '-', '健康账号'));
-  cards.push(card('blue', s.total ?? '-', '总账号'));
-  cards.push(card('yellow', s.cooling ?? 0, '冷却中'));
-  cards.push(card('red', s.disabled ?? 0, '已禁用'));
-  cards.push(card('', s.sticky_sessions ?? 0, '粘性会话'));
-  cards.push(card(hz===200?'green':'red', hz===200?'OK':'503', '健康检查 /healthz'));
+  cards.push(card('green',  s.healthy ?? '-', '正常账号'));
+  cards.push(card('blue',   s.total ?? '-',   '账号总数'));
+  cards.push(card('yellow', s.cooling ?? 0,   '冷却中'));
+  cards.push(card('red',    s.disabled ?? 0,  '已禁用'));
+  cards.push(card('',       s.sticky_sessions ?? 0, '临时会话'));
+  const hzOk = hz === 200;
+  cards.push(card(hzOk?'green':'red', hzOk?'正常':(hz||'断开'), '服务状态'));
   $('#cards').innerHTML = cards.join('');
 }
 
-function statusBadge(st){
-  const map = {healthy:'healthy',cooling:'cooling',disabled:'disabled'};
-  const c = map[st]||'';
-  return `<span class="badge ${c}">${st||'?'}</span>`;
-}
-
+/* ---------- 账号卡片 ---------- */
 function renderAccounts(s){
   const accs = Array.isArray(s.accounts) ? s.accounts : [];
-  if(accs.length===0){
-    $('#accounts').innerHTML = `<div class="empty">暂无账号。点击上方「＋ 登录 / 添加账号」按钮完成授权（支持连续登录多个账号）。</div>`;
+  if(accs.length === 0){
+    $('#accounts').innerHTML = `<div class="empty">还没有账号。点上面「＋ 登录 / 添加账号」按钮添加。</div>`;
     return;
   }
-  let rows = '';
+  let html = '';
   for(const a of accs){
-    const keys = Object.keys(a);
-    let cells = '';
-    for(const k of keys){
-      let v = a[k];
-      if(typeof v==='object') v = JSON.stringify(v);
-      if(k==='status') v = statusBadge(v);
-      cells += `<td class="k">${k}</td><td>${v ?? ''}</td>`;
+    const st = acctState(a);
+    const nick = (a.nickname && a.nickname !== '') ? a.nickname : '未命名账号';
+
+    // 关键信息：积分 / 累计成功 / 最近成功
+    const success = ago(a.last_success);
+    const successFull = fmtTime(a.last_success);
+    const lastErr = fmtTime(a.last_err);
+
+    let kv = '';
+    kv += `<div class="a-kv"><div class="k">剩余积分</div><div class="v big">${a.credits ?? '-'}</div></div>`;
+    kv += `<div class="a-kv"><div class="k">累计成功调用</div><div class="v">${a.success_count ?? 0}</div></div>`;
+    kv += `<div class="a-kv"><div class="k">最近成功</div><div class="v" title="${esc(successFull||'')}">${success || '还没成功过'}</div></div>`;
+    if(lastErr){
+      kv += `<div class="a-kv"><div class="k">最近出错</div><div class="v">${lastErr}</div></div>`;
     }
-    // 已禁用账号才给操作入口：健康/冷却账号是可用资产，不给删。
+
+    // 只有被禁用的账号才显示原因和处置按钮
+    let errBox = '';
     let ops = '';
     if(a.disabled === true){
-      const nick = (a.nickname && a.nickname!=='') ? a.nickname : a.uid;
-      ops = `<td><button class="act-relogin" data-uid="${a.uid}" data-nick="${nick}">重新登录</button> `+
-            `<button class="act-remove" data-uid="${a.uid}" data-nick="${nick}">删除</button></td>`;
-    } else {
-      ops = '<td class="muted">—</td>';
+      errBox = `<div class="a-err">原因：${esc(reasonCn(a.reason))}</div>`;
+      ops = `<div class="a-ops">
+        <button class="act-relogin" data-uid="${esc(a.uid)}" data-nick="${esc(nick)}">重新登录</button>
+        <button class="act-remove" data-uid="${esc(a.uid)}" data-nick="${esc(nick)}">删除</button>
+      </div>`;
     }
-    rows += `<tr>${cells}${ops}</tr>`;
+
+    html += `<div class="acct ${st.cls}">
+      <div class="a-head">
+        <div>
+          <div class="a-name">${esc(nick)}</div>
+          <div class="a-uid">${esc(a.uid)}</div>
+        </div>
+        <span class="a-badge ${st.cls}">${st.text}</span>
+        ${ops}
+      </div>
+      <div class="a-grid">${kv}</div>
+      ${errBox}
+    </div>`;
   }
-  $('#accounts').innerHTML = `<table><tbody>${rows}</tbody>`;
-  // 事件委托：按钮随表格重绘，逐个绑会漏
+  $('#accounts').innerHTML = html;
   $('#accounts').querySelectorAll('.act-relogin').forEach(b=>{
     b.onclick = ()=> reloginAccount(b.dataset.uid, b.dataset.nick);
   });
@@ -188,19 +325,21 @@ function renderAccounts(s){
   });
 }
 
+/* ---------- 模型 ---------- */
 function renderModels(m){
   const list = (m && m.data) ? m.data : [];
-  if(list.length===0){
-    $('#models').innerHTML = `<div class="empty">未拉到模型（可能尚未登录账号）。</div>`;
+  if(list.length === 0){
+    $('#models').innerHTML = `<div class="empty">没拉到模型，可能还没登录账号。</div>`;
     return;
   }
-  $('#models').innerHTML = list.map(x=>`<span class="pill">${x.id||x}</span>`).join('');
+  $('#models').innerHTML = list.map(x=>`<span class="pill">${esc(x.id||x)}</span>`).join('');
 }
 
+/* ---------- 主流程 ---------- */
 async function load(){
   const key = getKey();
   if(!key){
-    $('#accounts').innerHTML = `<div class="err">未填写 api_key。请在右上角填入 config.json 里的 api_key 后点保存。</div>`;
+    $('#accounts').innerHTML = `<div class="err">还没填密钥。请在右上角输入 config.json 里的 api_key，然后点保存。</div>`;
     return;
   }
   try {
@@ -213,9 +352,9 @@ async function load(){
     renderAccounts(s);
     renderModels(m);
     loadSchedule();
-    $('#raw').textContent = JSON.stringify(s, null, 2);
+    $('#rawBox').innerHTML = `<details><summary>展开看原始 JSON</summary><pre>${esc(JSON.stringify(s,null,2))}</pre></details>`;
   } catch(e){
-    $('#accounts').innerHTML = `<div class="err">请求失败：HTTP ${e.status||''} ${e.text||e.message||e}</div>`;
+    $('#accounts').innerHTML = `<div class="err">请求失败：HTTP ${e.status||''} ${esc(e.text||e.message||e)}</div>`;
   }
 }
 
@@ -228,7 +367,7 @@ $('#saveKey').onclick = ()=>{ setKey($('#apikey').value.trim()); load(); };
 $('#refresh').onclick = load;
 $('#auto').onchange = startAuto;
 
-// ---- 面板内登录（多账号）----
+/* ---------- 登录 ---------- */
 let pollTimer = null, pollState = '';
 async function startLogin(){
   $('#loginBox').style.display = 'block';
@@ -245,46 +384,44 @@ async function startLogin(){
     clearInterval(pollTimer);
     pollTimer = setInterval(pollLogin, 3000);
   } catch(e){
-    $('#loginStatus').innerHTML = `<span class="err">发起失败：${errText(e)}</span>`;
+    $('#loginStatus').innerHTML = `<span class="err">发起失败：${esc(errText(e))}</span>`;
   }
 }
 async function pollLogin(){
   if(!pollState) return;
   try {
     const d = await getJSON('/api/login/poll?state='+encodeURIComponent(pollState));
-    if(d.status === 'pending') return; // 用户还没完成登录，继续轮询
+    if(d.status === 'pending') return;
     clearInterval(pollTimer); pollTimer = null; pollState = '';
     $('#loginBtn').disabled = false;
     if(d.status === 'done'){
-      $('#loginStatus').innerHTML = `✅ 登录成功：${(d.nickname&&d.nickname!=='')?d.nickname:'账号'}（uid=${d.uid}），凭证已保存并热加载，当前账号数 ${d.total_accounts}`;
+      const nick = (d.nickname && d.nickname !== '') ? d.nickname : '账号';
+      $('#loginStatus').innerHTML = `✅ 登录成功：${esc(nick)}，当前共 ${d.total_accounts} 个账号`;
       load();
     } else {
-      $('#loginStatus').innerHTML = `<span class="err">❌ ${d.message||d.status}</span>`;
+      $('#loginStatus').innerHTML = `<span class="err">❌ ${esc(d.message||d.status)}</span>`;
     }
   } catch(e){
     clearInterval(pollTimer); pollTimer = null; pollState = '';
     $('#loginBtn').disabled = false;
-    $('#loginStatus').innerHTML = `<span class="err">轮询失败：${errText(e)}</span>`;
+    $('#loginStatus').innerHTML = `<span class="err">检测失败：${esc(errText(e))}</span>`;
   }
 }
 $('#loginBtn').onclick = startLogin;
 
-// ---- 禁用账号处置 ----
+/* ---------- 账号处置 ---------- */
 function acctMsg(html, ok){
   $('#acctResult').innerHTML = `<div class="${ok?'':'err'}" style="margin:2px 0">${html}</div>`;
 }
 
-// 重新登录：复用现有 OAuth 流程。登录成功后服务端会覆盖凭证并自动解禁，
-// 无需先删账号——upsert 只换凭证，解禁由 /api/login/poll 的 done 分支负责。
 async function reloginAccount(uid, nick){
-  if(!confirm(`重新登录「${nick}」？\n\n会在新标签页打开授权页，登录完成后凭证自动覆盖并解除禁用。`)) return;
+  if(!confirm(`重新登录「${nick}」？\n\n会在新标签页打开授权页，登录完成后自动覆盖旧凭证并解除禁用。`)) return;
   acctMsg(`正在为「${nick}」发起重新授权…`, true);
   await startLogin();
 }
 
-// 删除：仅禁用账号可用。删 auths 凭证文件 + 池内剔除（state.json 同步落盘，重启不复活）。
 async function removeAccount(uid, nick){
-  if(!confirm(`确定删除已禁用的账号「${nick}」？\n\n将删除其凭证文件，需重新「＋ 登录」才能恢复。`)) return;
+  if(!confirm(`确定删除已禁用的账号「${nick}」？\n\n会删掉它的凭证文件，以后要重新「＋ 登录」才能恢复。`)) return;
   acctMsg(`正在删除「${nick}」…`, true);
   try {
     const r = await fetch('/api/accounts/remove', {
@@ -294,44 +431,64 @@ async function removeAccount(uid, nick){
     });
     const d = await r.json().catch(()=>({}));
     if(!r.ok) throw d;
-    acctMsg(`✅ 已删除「${nick}」。剩余账号 ${d.remaining ?? '-'} 个。`, true);
+    acctMsg(`✅ 已删除「${nick}」，还剩 ${d.remaining ?? '-'} 个账号`, true);
     load();
   } catch(e){
-    acctMsg(`❌ 删除失败：${errText(e)}`, false);
+    acctMsg(`❌ 删除失败：${esc(errText(e))}`, false);
   }
 }
 
-// ---- 每日签到 ----
+/* ---------- 每日签到 ---------- */
 async function loadSchedule(){
   try {
     const d = await getJSON('/api/schedule');
-    const hrs = (d.checkin_hours||[]).map(h=>String(h).padStart(2,'0')+':00').join(' / ');
-    $('#scheduleInfo').textContent = `自动签到：每天 ${hrs} ｜ 下次：${d.next_checkin_at}（${d.timezone}）`;
+    const hrs = (d.checkin_hours||[]).map(h=>String(h).padStart(2,'0')+':00').join(' 和 ');
+    $('#scheduleInfo').textContent = `自动签到时间：每天 ${hrs}　下次执行：${fmtTime(d.next_checkin_at) || d.next_checkin_at || '-'}`;
   } catch(e){
-    $('#scheduleInfo').innerHTML = `<span class="err">调度信息加载失败：${errText(e)}</span>`;
+    $('#scheduleInfo').innerHTML = `<span class="err">自动签到时间读取失败：${esc(errText(e))}</span>`;
   }
 }
+
+// 签到结果里后端返回的中文/英文混排，统一清洗
+function ckState(x){
+  const s = String(x.checkin || '');
+  if(/成功|ok|success/i.test(s)) return {cls:'ok', text:'签到成功'};
+  if(/已签|already|重复/i.test(s)) return {cls:'al', text:'今天已经签过'};
+  if(/失败|fail|error/i.test(s)) return {cls:'bad', text:'签到失败'};
+  if(/跳过|skip/i.test(s)) return {cls:'al', text:'已跳过'};
+  return {cls:'', text:s || '-'};
+}
+
 async function runCheckin(){
   const btn = $('#checkinBtn');
   btn.disabled = true; btn.textContent = '签到中…';
-  $('#checkinResult').innerHTML = `<div class="muted">正在对所有账号执行签到（含余额刷新与解冻），请稍候…</div>`;
+  $('#checkinResult').innerHTML = `<div class="muted">正在给所有账号签到（顺带刷新积分、解冻），稍等一下…</div>`;
   try {
     const r = await fetch('/api/checkin', {method:'POST', headers:authHeaders()});
     const d = await r.json();
     if(!r.ok) throw d;
     const s = d.summary||{};
-    const rows = (d.results||[]).map(x=>`<tr>
-      <td class="k">uid</td><td>${(x.uid||'').replace(/</g,'&lt;')}</td>
-      <td class="k">昵称</td><td>${(x.nickname||'-').replace(/</g,'&lt;')}</td>
-      <td class="k">签到</td><td>${x.checkin||''}</td>
-      <td class="k">余额</td><td>${x.remain>=0?x.remain:'-'}</td>
-      <td class="k">详情</td><td class="muted">${(x.detail||'').replace(/</g,'&lt;')}</td>
-    </tr>`).join('');
-    $('#checkinResult').innerHTML = `<div class="muted">完成：成功 ${s.ok||0} ｜ 已签 ${s.already||0} ｜ 失败 ${s.fail||0} ｜ 跳过 ${s.skip||0}</div>
-      <table style="margin-top:8px"><tbody>${rows}</tbody></table>`;
+    const items = (d.results||[]).map(x=>{
+      const st = ckState(x);
+      const nick = (x.nickname && x.nickname !== '') ? x.nickname : (x.uid||'未知账号');
+      let d2 = x.detail ? String(x.detail) : '';
+      if(/session dead|12153/i.test(d2)) d2 = reasonCn(d2);
+      return `<div class="ck-item ${st.cls}">
+        <div class="t">${esc(nick)}　<span class="muted" style="font-weight:400;font-size:12px">${esc(st.text)}　积分 ${x.remain>=0?x.remain:'-'}</span></div>
+        ${d2?`<div class="d">${esc(d2)}</div>`:''}
+      </div>`;
+    }).join('');
+    $('#checkinResult').innerHTML = `
+      <div class="sum">
+        <span class="ok">成功 ${s.ok||0}</span>
+        <span class="al">已签过 ${s.already||0}</span>
+        <span class="bad">失败 ${s.fail||0}</span>
+        <span>跳过 ${s.skip||0}</span>
+      </div>
+      ${items || '<div class="empty">没有结果</div>'}`;
     load();
   } catch(e){
-    $('#checkinResult').innerHTML = `<div class="err">签到失败：${errText(e)}</div>`;
+    $('#checkinResult').innerHTML = `<div class="err">签到失败：${esc(errText(e))}</div>`;
   }
   btn.disabled = false; btn.textContent = '立即全量签到';
 }
